@@ -143,6 +143,7 @@ INSTALLED_APPS = (
     'traq.tickets',
     'traq.accounts',
     'traq.permissions',
+    'traq.notifications',
     'traq',
     'south',
     'cloak',
