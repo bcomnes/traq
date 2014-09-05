@@ -9,6 +9,11 @@
 {% endif %}
 <form method="post" action="">
     {% csrf_token %}
+    {% if form.errors %}
+        <div class="alert alert-danger">
+            Your form had some errors in it. Fix'em
+        </div>
+    {% endif %}
     {{ form.as_p }}
     <input type="submit" class='btn btn-primary btn-sm' name="submit" value="Submit" />
 </form>
