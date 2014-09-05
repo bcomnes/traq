@@ -13,6 +13,7 @@ import tickets.views
 import tickets.views.work
 import todos.views
 import accounts.views
+import notifications.views
 
 # Uncomment the next two lines to enable the admin:
 from django.contrib import admin
@@ -82,6 +83,9 @@ urlpatterns = patterns('',
     url(r'^tickets/(\d+)/work/create/?$', tickets.views.work.create, name='work-create'),
     url(r'^work/(\d+)/pause/?$', tickets.views.work.pause, name='work-pause'),
     url(r'^work/(\d+)/continue/?$', tickets.views.work.continue_, name='work-continue'),
+
+    # notifications
+    url(r'^notifications/?$', notifications.views.index),
 
     # Examples:
     # url(r'^$', 'example.views.home', name='home'),
