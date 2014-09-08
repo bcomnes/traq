@@ -89,6 +89,7 @@ class Project(models.Model):
     estimated_hours = models.IntegerField(null=True, default=None, blank=True)
     is_scrum = models.BooleanField(default=False, help_text='This turns on a bunch of annoying Scrum things') 
     current_sprint_end= models.DateField(null=True, blank=True, verbose_name="Sprint End")  
+    slug = models.SlugField(blank=True, default="", verbose_name="Slug")  
     
 
     def __unicode__(self):
