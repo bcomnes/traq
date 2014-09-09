@@ -26,12 +26,17 @@ def verify(api_key, token, timestamp, signature):
     else:
         raise DoesNotVerify()
 
-def get_user_part(address):
+def ParseEmail(address):
     # this should do some simple validation and return the target project slug
-    # TODO: Validate this stuff
+    # TODO: Validate the email address
     # https://github.com/django/django/blob/master/django/core/validators.py#L119
     user_part, domain_part = address.rsplit('@', 1)
-    return user_part
+    return {'user_part':user_part, 'domain_part':domain_part}
+
+def MapSender(address):
+    # Maps the 'sender' address to alternate odin addresses or a non-odin user
+    # If part of PDX.edu domain, look up odin account with email address
+    # If not part of PDX.edu, create account with trimmed email address as username
 
 @csrf_exempt
 def index(request):
@@ -40,7 +45,6 @@ def index(request):
 
     elif request.method == 'POST':
         response = HttpResponse()
-
 
         try:
             token = request.POST['token']
@@ -56,7 +60,7 @@ def index(request):
             return response
 
         try:
-            slug = get_user_part(recipient)
+            slug = ParseEmail(recipient)['user_part']
         except InvalidSlug:
             response.content = "Malformed slug"
             response.status_code = 406
@@ -80,7 +84,7 @@ def index(request):
             created_by = User.objects.get(email = sender)
         except User.DoesNotExist:
             # TODO: Create a new user if they don't exist
-            created_by = User.objects.create_user(get_user_part(sender), email=sender)
+            created_by = User.objects.create_user(ParseEmail(sender)['user_part'], email=sender)
             created_by.save()
 
         status = TicketStatus.objects.get(is_default=True)
