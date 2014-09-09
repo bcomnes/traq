@@ -26,7 +26,7 @@ def verify(api_key, token, timestamp, signature):
     else:
         raise DoesNotVerify()
 
-def get_slug(address):
+def get_user_part(address):
     # this should do some simple validation and return the target project slug
     # TODO: Validate this stuff
     # https://github.com/django/django/blob/master/django/core/validators.py#L119
@@ -56,7 +56,7 @@ def index(request):
             return response
 
         try:
-            slug = get_slug(recipient)
+            slug = get_user_part(recipient)
         except InvalidSlug:
             response.content = "Malformed slug"
             response.status_code = 406
@@ -75,11 +75,12 @@ def index(request):
             response.content = "That project does not exist"
             response.status_code = 406
             return response
+
         try:
             created_by = User.objects.get(email = sender)
         except User.DoesNotExist:
             # TODO: Create a new user if they don't exist
-            created_by = User()
+            created_by = User.objects.create_user(get_user_part(sender), email=sender)
             created_by.save()
 
         status = TicketStatus.objects.get(is_default=True)
