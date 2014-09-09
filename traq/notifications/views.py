@@ -1,7 +1,9 @@
 import hashlib, hmac
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
-
+from django.contrib.auth.models import User
+from traq.projects.models import Project, Component
+from traq.tickets.models import Ticket, TicketStatus, TicketPriority
 
 from traq.local_settings import MAILGUN_API_KEY
 
@@ -19,9 +21,9 @@ def verify(api_key, token, timestamp, signature):
                         key=api_key,
                         msg= timestamp + token,
                         digestmod=hashlib.sha256).hexdigest()
-    if signature == hmac.new
+    if signature == req_hash:
         return
-    else
+    else:
         raise DoesNotVerify()
 
 def get_slug(address):
@@ -39,32 +41,56 @@ def index(request):
     elif request.method == 'POST':
         response = HttpResponse()
 
+
         try:
             token = request.POST['token']
             timestamp = request.POST['timestamp']
             signature = request.POST['signature']
             recipient = request.POST['recipient']
+            sender = request.POST['sender']
             subject = request.POST['subject']
-            body = request.POST['body?']
-            api_key = MAILGUN_API_KEY
-            slug = get_slug(recipient)
-
-            verify(api_key, token, timestamp, signature)
-            project = Projects.objects.get(slug = slug)
-            t = Ticket(project = project, name = subject, body = body)
-            t.save()
-            response.content = "A new ticket has been created"
-        except DoesNotExist:
-            response.content = "That project does not exist"
+            body = request.POST['body-plain']
+        except KeyError:
+            response.content = "Missing critical fields"
             response.status_code = 406
+            return response
+
+        try:
+            slug = get_slug(recipient)
+        except InvalidSlug:
+            response.content = "Malformed slug"
+            response.status_code = 406
+            return response
+
+        try:
+            verify(MAILGUN_API_KEY, token, timestamp, signature)
         except DoesNotVerify:
             response.content = "Invalid mailgun token"
             response.status_code = 406
-        except InvalidSlug:
-            response.content = "Malformed email address"
-            response.status_code = 406
-        finally
             return response
+
+        try:
+            project = Project.objects.get(slug = slug)
+        except Project.DoesNotExist:
+            response.content = "That project does not exist"
+            response.status_code = 406
+            return response
+        try:
+            created_by = User.objects.get(email = sender)
+        except User.DoesNotExist:
+            # TODO: Create a new user if they don't exist
+            created_by = User()
+            created_by.save()
+
+        status = TicketStatus.objects.get(is_default=True)
+        priority = TicketPriority.objects.get(is_default=True)
+        component = Component.objects.get(is_default=True, project = project)
+
+
+        t = Ticket(project=project, title=subject, body = body, created_by = created_by, status = status, priority = priority, component = component)
+        t.save()
+        response.content = "A new ticket has been created"
+        return response
 
 # Example: http://documentation.mailgun.com/quickstart-receiving.html#supported-actions-for-routes
 # securing webhooks http://documentation.mailgun.com/user_manual.html#webhooks
