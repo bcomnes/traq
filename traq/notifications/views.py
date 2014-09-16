@@ -1,4 +1,5 @@
 import hashlib, hmac
+from arcutils import ldap
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.core.exceptions import ValidationError
@@ -26,14 +27,25 @@ def verify(api_key, token, timestamp, signature):
     else:
         raise DoesNotVerify()
 
-def ParseEmail(address):
+def parse_email(address):
     validate_email(address)
     user_part, domain_part = address.rsplit('@', 1)
     return {'user_part':user_part, 'domain_part':domain_part}
 
-def LdapAlt(address):
-    alt = address # TODO: Actually look up an alternate email address
-    return alt
+def create_ldap_set(address):
+    qs = "(| (mail={0}) (mailRoutingAddress={0}) (mailLocalAddress={0}))".format(address)
+    results = ldap.ldapsearch(qs)
+    
+    mail = results[0][1]['mail']
+    mailRoutingAddress = results[0][1]['mailRoutingAddress']
+    mailLocalAddress = results[0][1]['mailLocalAddress']
+
+    return set(mail + mailRoutingAddress + mailLocalAddress) - set([address])
+
+def create_new_user(address):
+    new_user = User.objects.created_byuser(sender, email=sender)
+    new_user.save()
+    return new_user
 
 @csrf_exempt
 def index(request):
@@ -57,7 +69,8 @@ def index(request):
             return response
 
         try:
-            slug = ParseEmail(recipient)['user_part']
+            slug = parse_email(recipient)['user_part']
+            sender_domain = parse_email(recipient)['domain_part']
             validate_email(sender)
         except ValidationError:
             response.content = "Malformed email address"
@@ -81,18 +94,23 @@ def index(request):
         try:
             created_by = User.objects.get(email = sender)
         except User.DoesNotExist:
-            try:
-                created_by = User.objects.get(email = LdapAlt(sender))
-            except User.DoesNotExist:
-                created_by = User.objects.created_byuser(sender, email=sender)
-                created_by.save()
+            if sender_domain != 'pdx.edu':
+                created_by = create_new_user(sender)
+            else:
+                alt_users = User.objects.filter(email__in= list(create_ldap_set(sender)))
+                if len(alt_users) > 0:
+                    created_by = alt_users[0]
+                else:
+                    created_by = create_new_user(sender)
 
-        status = TicketStatus.objects.get(is_default=True)
-        priority = TicketPriority.objects.get(is_default=True)
-        component = Component.objects.get(is_default=True, project = project)
-
-
-        t = Ticket(project=project, title=subject, body = body, created_by = created_by, status = status, priority = priority, component = component)
-        t.save()
-        response.content = "A new ticket has been created"
+        if created_by.groups.filter(name__in = ['arcstaff','arc']).exists():
+            status = TicketStatus.objects.get(is_default=True)
+            priority = TicketPriority.objects.get(is_default=True)
+            component = Component.objects.get(is_default=True, project = project)
+            
+            t = Ticket(project=project, title=subject, body = body, created_by = created_by, status = status, priority = priority, component = component)
+            t.save()
+            response.content = "A new ticket has been created"
+        else:
+            # Create todo
         return response

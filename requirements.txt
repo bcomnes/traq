@@ -9,3 +9,4 @@ django-extensions
 django_filter
 South<2.0
 django-cloak
+-e git://github.com/PSU-OIT-ARC/django-arcutils.git#egg=django-arcutils

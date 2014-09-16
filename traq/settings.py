@@ -9,6 +9,17 @@ LDAP_URL = "ldap://ldap-login.oit.pdx.edu"
 LDAP_BASE_DN = 'dc=pdx,dc=edu'
 LDAP_DISABLED = False
 
+LDAP = {
+    "default": {
+        "host": "ldap://ldap-bulk.oit.pdx.edu",
+        "username": "uid=traq,ou=service,dc=pdx,dc=edu",
+        "password": "",
+        "search_dn": "ou=people,dc=pdx,dc=edu",
+        "tls": True,
+        "ca_file": os.path.join(PROJECT_DIR, "ca.crt"), # the full path to the certificate authority file
+    }
+}
+
 # When an email is sent to a user, the address is formed by username@EMAIL_DOMAIN
 EMAIL_DOMAIN = 'pdx.edu'
 

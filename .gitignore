@@ -8,3 +8,4 @@ logs/*
 htdocs/media
 bin/manage
 bin/driver
+ca.crt
