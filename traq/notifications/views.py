@@ -7,7 +7,6 @@ from django.core.validators import EmailValidator
 from django.contrib.auth.models import User
 from traq.projects.models import Project, Component
 from traq.tickets.models import Ticket, TicketStatus, TicketPriority
-from traq.todos.models import ToDo
 
 from traq.local_settings import MAILGUN_API_KEY
 
@@ -111,14 +110,15 @@ def index(request):
 
         status = TicketStatus.objects.get(is_default=True)
         priority = TicketPriority.objects.get(is_default=True)
-        component = Component.objects.get(is_default=True, project = project)
+        component = Component.objects.get(is_default=True, project=project)
+        new_ticket = Ticket(project=project, title=subject, body=body, created_by=created_by, status=status, priority=priority, component=component)
+        new_ticket.save()
+        response.content = "A new ticket has been created"
+        return response
 
-        if created_by.groups.filter(name__in=['arcstaff', 'arc']).exists():
-            new_ticket = Ticket(project=project, title=subject, body = body, created_by = created_by, status = status, priority = priority, component = component)
-            new_ticket.save()
-            response.content = "A new ticket has been created"
-        else:
-            new_todo = ToDo(project=project, title=subject, body = body, created_by = created_by, status = status, priority = priority, component = component)
-            new_todo.save()
-            response.content = "A new todo has been created"
-        return response 
+        #if created_by.groups.filter(name__in=['arcstaff', 'arc']).exists():
+        #    # Stuff
+        #else:
+        #    new_todo = ToDo(project=project, title=subject, body = body, #created_by = created_by, status = status, priority = priority, #component = component)
+        #    new_todo.save()
+        #    response.content = "A new todo has been    created"
