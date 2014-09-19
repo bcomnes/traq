@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import EmailValidator
 from django.contrib.auth.models import User
 from traq.projects.models import Project, Component
-from traq.tickets.models import Ticket, TicketStatus, TicketPriority
+from traq.tickets.models import Ticket, TicketStatus, TicketPriority, Comment
 
 from traq.local_settings import MAILGUN_API_KEY
 
@@ -44,6 +44,17 @@ def create_ldap_set(address):
     mailLocalAddress = results[0][1]['mailLocalAddress']
 
     return set(mail + mailRoutingAddress + mailLocalAddress) - set([address])
+
+def create_notify_set(ticket):
+    """
+    Returns the set of user objects to be notified
+    """
+    participants = [comment.created_by for comment in ticket.comment_set.all()]
+    created = if ticket.created_by [ticket.created_by] else []
+    assigned = if ticket.assigned_to [ticket.assigned_to] else []
+    spammed = ticket.project.spammed.all()
+
+    return set(participants + created + assigned + spammed)
 
 def create_new_user(address):
     """Create and return a new User object based on their email address"""
