@@ -1,4 +1,4 @@
-import hashlib, hmac
+import hashlib, hmac, re
 from arcutils import ldap
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -9,8 +9,6 @@ from traq.projects.models import Project, Component
 from traq.tickets.models import Ticket, TicketStatus, TicketPriority, Comment
 
 from traq.local_settings import MAILGUN_API_KEY
-
-validate_email = EmailValidator()
 
 class DoesNotVerify(Exception):
     """Exception when the request isn't a valid mailgun POST"""
@@ -29,38 +27,62 @@ def verify(api_key, token, timestamp, signature):
         raise DoesNotVerify()
 
 def parse_email(address):
-    """Returns a dictionary with the user part and domain part of an email address after making sure the address is a valid email address"""
-    validate_email(address)
+    """Returns a dictionary of [user_part]@[donain_part] from the address"""
+    EmailValidator(address)
     user_part, domain_part = address.rsplit('@', 1)
     return {'user_part':user_part, 'domain_part':domain_part}
 
+def get_ticket(mail_subject):
+    """Returns the ticket object referenced in the subject tag"""
+    tags = re.findall(r"\[(.*?)\]", mail_subject)
+    if len(tags) > 0:
+        # Sample ticket tag: [TRAQ #123]
+        tag_number = tags[0].split("#")[1]
+        # eg tag_numer should now be '123'
+        return Ticket.objects.get(ticket_id=tag_number)
+    else:
+        return False
+
 def create_ldap_set(address):
-    """Returns a set of possible alternate email addresses without the input email address"""
+    """Returns a set of alternate email addresses from an input email address"""
     qs = "(| (mail={0}) (mailRoutingAddress={0}) (mailLocalAddress={0}))".format(address)
     results = ldap.ldapsearch(qs)
     
     mail = results[0][1]['mail']
-    mailRoutingAddress = results[0][1]['mailRoutingAddress']
-    mailLocalAddress = results[0][1]['mailLocalAddress']
+    mail_routing_address = results[0][1]['mailRoutingAddress']
+    mail_local_address = results[0][1]['mailLocalAddress']
 
-    return set(mail + mailRoutingAddress + mailLocalAddress) - set([address])
+    return set(mail + mail_routing_address + mail_local_address) - set([address])
 
 def create_notify_set(ticket):
     """
     Returns the set of user objects to be notified
     """
     participants = [comment.created_by for comment in ticket.comment_set.all()]
-    created = if ticket.created_by [ticket.created_by] else []
-    assigned = if ticket.assigned_to [ticket.assigned_to] else []
+    created = [ticket.created_by] if ticket.created_by else []
+    assigned = [ticket.assigned_to] if ticket.assigned_to else []
     spammed = ticket.project.spammed.all()
 
     return set(participants + created + assigned + spammed)
 
 def create_new_user(address):
     """Create and return a new User object based on their email address"""
-    new_user = User.objects.create_user(address, email=address)
+
+    name = parse_email(address)['user_part'] if parse_email(address)['sender_domain'] == 'pdx.edu' else address
+    new_user = User.objects.create_user(name, email=address)
     new_user.save()
     return new_user
+
+def create_new_ticket_object(project, subject, body, created_by):
+    """Creates and returns a new Ticket Object"""
+    status = TicketStatus.objects.get(is_default=True)
+    priority = TicketPriority.objects.get(is_default=True)
+    component = Component.objects.get(is_default=True, project=project)
+    return Ticket(project=project, title=subject, body=body, created_by=created_by, status=status, priority=priority, component=component)
+
+def create_new_comment_object(ticket, body, created_by):
+    """Creates and returns a new Comment Object"""
+    return Comment(Ticket=ticket, body=body, created_by=created_by)
 
 @csrf_exempt
 def index(request):
@@ -86,8 +108,7 @@ def index(request):
 
         try:
             slug = parse_email(recipient)['user_part']
-            sender_domain = parse_email(recipient)['domain_part']
-            validate_email(sender)
+            EmailValidator(sender)
         except ValidationError:
             response.content = "Malformed email address"
             response.status_code = 406
@@ -101,35 +122,40 @@ def index(request):
             return response
 
         try:
-            project = Project.objects.get(slug=slug)
-        except Project.DoesNotExist:
-            response.content = "That project does not exist"
-            response.status_code = 406
-            return response
-
-        try:
             created_by = User.objects.get(email=sender)
         except User.DoesNotExist:
+            sender_domain = parse_email(recipient)['domain_part']
             if sender_domain != 'pdx.edu':
                 created_by = create_new_user(sender)
             else:
                 alt_users = User.objects.filter(email__in=list(create_ldap_set(sender)))
                 if len(alt_users) > 0:
+                    # TODO: Prioritise alternate email addresses
                     created_by = alt_users[0]
                 else:
                     created_by = create_new_user(sender)
 
-        status = TicketStatus.objects.get(is_default=True)
-        priority = TicketPriority.objects.get(is_default=True)
-        component = Component.objects.get(is_default=True, project=project)
-        new_ticket = Ticket(project=project, title=subject, body=body, created_by=created_by, status=status, priority=priority, component=component)
-        new_ticket.save()
-        response.content = "A new ticket has been created"
-        return response
+        try:
+            ticket = get_ticket(subject)
+        except Ticket.DoesNotExist:
+            response.content = "That ticket does not exist"
+            response.status_code = 406
+        try:
+            project = Project.objects.get(slug=slug)
+        except Project.DoesNotExist:
+            response.content = "That project does not exist"
+            response.status_code = 406
 
-        #if created_by.groups.filter(name__in=['arcstaff', 'arc']).exists():
-        #    # Stuff
-        #else:
-        #    new_todo = ToDo(project=project, title=subject, body = body, #created_by = created_by, status = status, priority = priority, #component = component)
-        #    new_todo.save()
-        #    response.content = "A new todo has been    created"
+        if ticket:
+            # create comment
+            new_comment = create_new_comment_object(ticket, body, created_by)
+            new_comment.save()
+            response.content = "A new comment has been created"
+            # notify participating - created_by
+        elif project:
+            # try to create new ticket
+            new_ticket = create_new_ticket(project, subject, body, created_by)
+            new_ticket.save()
+            response.content = "A new ticket has been created"
+            # notify participating
+        return response
