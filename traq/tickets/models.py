@@ -13,6 +13,17 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 import re
 
+def participating(ticket):
+    """
+    Returns the full set of user objects that have participated in a ticket
+    """
+    participants = [comment.created_by for comment in ticket.comment_set.all()]
+    created = [ticket.created_by] if ticket.created_by else []
+    assigned = [ticket.assigned_to] if ticket.assigned_to else []
+    spammed = ticket.project.spammed.all()
+
+    return set(participants + created + assigned + spammed)
+
 class TicketStatus(models.Model):
     ticket_status_id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=255)
@@ -134,8 +145,10 @@ class Ticket(models.Model):
         # send a notification for a new ticket, or one that was assigned
         if is_new or original.assigned_to_id != self.assigned_to_id:
             self.sendNotification('New')
-        if is_done:
-            self.sendNotification(self.status)
+        else:
+            self.sendNotification()
+        #if is_done:
+        #    self.sendNotification(self.status)
 
         if not is_new:
             # close all the running work on this ticket if it just turned to Completed or closed
@@ -193,14 +206,14 @@ class Ticket(models.Model):
             text_content = render_to_string('tickets/notification.txt', context)
             html_content = render_to_string('tickets/notification.html', context)
             clean_title = re.sub(r"[\r\n]+", "; ", self.title)
-            subject = 'Traq: %s Ticket #%d %s' % (status, self.pk, clean_title)
+            subject = '[Traq #%d] (%s) %s' % (self.pk, status, clean_title)
 
             msg = EmailMultiAlternatives(subject, text_content, 'traq@pdx.edu', [to])
             msg.attach_alternative(html_content, "text/html")
             msg.send()
-    
+
     def __unicode__(self):
-        return u'#%s: %s' % (self.pk, self.title) 
+        return u'#%s: %s' % (self.pk, self.title)
 
     class Meta:
         db_table = 'ticket'
@@ -351,8 +364,22 @@ class Comment(models.Model):
     ticket = models.ForeignKey(Ticket, null=True)
     created_by = models.ForeignKey(User, related_name='+')
     objects = CommentManager()
-    
 
+    def sendNotification(self):
+        if self.body:
+            if self.ticket:
+                # Send a ticket comment notification
+                recipients = list(participating(self.ticket) + set(self.cc) - set([self.created_by]))
+                item = 'Ticket'
+                ticket = self.ticket or None
+                ticket_url = SETTINGS.BASE_URL + reverse('tickets-detail', args=(ticket.pk,))
+            elif self.todo:
+                # Send a todo notification
+                item = 'To Do'
+                ticket = self.todo or None
+                ticket_url = SETTINGS.BASE_URL + reverse('todos-detail', args=(ticket.pk,))
+            else:
+                # Thow an error
     def sendNotification(self, cc=None):
         """Send a notification email to the pm when a comment is made on  this ticket"""
         to = []
