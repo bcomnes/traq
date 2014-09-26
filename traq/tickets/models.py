@@ -67,9 +67,9 @@ class TicketManager(models.Manager):
         """Return a query set of tickets with all the useful related fields and
         the default ordering"""
         queryset = Ticket.objects.filter(project__is_deleted=False).select_related(
-            'status', 
-            'priority', 
-            'assigned_to', 
+            'status',
+            'priority',
+            'assigned_to',
             'created_by',
             'component',
             'milestone',
@@ -114,7 +114,7 @@ class Ticket(models.Model):
     milestone = models.ForeignKey(Milestone, null=True, default=None, blank=True)
 
     type = models.ForeignKey(TicketType, null=True, blank=True)
-    
+
     objects = TicketManager()
 
     def isOverDue(self):
@@ -174,11 +174,11 @@ class Ticket(models.Model):
         args = tuple(chain((self.pk, Work.DONE,), interval))*3 # times 3 because the same args are used for total, billable and non_billable
 
         rows = Ticket.objects.raw("""
-            SELECT ticket_id, 
+            SELECT ticket_id,
             (SELECT IFNULL(SUM(TIME_TO_SEC(`time`)), 0) FROM work WHERE is_deleted = 0 AND ticket_id = %s AND work.state = %s AND """ + sql_where + """ ) AS total_time,
             (SELECT IFNULL(SUM(TIME_TO_SEC(`time`)), 0) FROM work WHERE is_deleted = 0 AND ticket_id = %s AND work.state = %s AND """ + sql_where + """ AND billable = 1 ) AS billable_time,
             (SELECT IFNULL(SUM(TIME_TO_SEC(`time`)), 0) FROM work WHERE is_deleted = 0 AND ticket_id = %s AND work.state = %s AND """ + sql_where + """ AND billable = 0 ) AS non_billable_time
-            FROM ticket 
+            FROM ticket
             WHERE ticket_id = %s
         """, args + (self.pk,))
         times = list(rows)[0]
@@ -444,9 +444,9 @@ def my_handler(sender, instance, **kwargs):
             tic = Ticket.objects.filter(todos=todo).values_list('status', flat=True)
             print instance.status
             print tic
-            if 1 in tic or 2 in tic or 3 in tic: 
+            if 1 in tic or 2 in tic or 3 in tic:
                 todo.status_id=2
-            else: 
+            else:
                 todo.status_id = 5
             todo.save()
 
