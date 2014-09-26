@@ -20,7 +20,7 @@ def participating(ticket):
     participants = [comment.created_by for comment in ticket.comment_set.all()]
     created = [ticket.created_by] if ticket.created_by else []
     assigned = [ticket.assigned_to] if ticket.assigned_to else []
-    spammed = ticket.project.spammed.all()
+    spammed = [user for user in ticket.project.spammed.all()]
 
     return set(participants + created + assigned + spammed)
 
@@ -191,12 +191,12 @@ class Ticket(models.Model):
             'billable': billable,
             'non_billable': non_billable,
         }
-
     def sendNotification(self, *args):
-        status = args[0]
-        """Send a notification email to the person assigned to this ticket"""
-        if self.assigned_to:
-            to = self.assigned_to.username + "@" + SETTINGS.EMAIL_DOMAIN
+        recipients = list(participating(self))
+        is_new = args[0] is 'New'
+        """Send a notification email to the everyone involved in the ticket"""
+        if len(recipients) > 0:
+            to = [recipient.email for recipient in recipients]
             ticket_url = SETTINGS.BASE_URL + reverse('tickets-detail', args=(self.pk,))
             context = {
                 "ticket": self,
@@ -206,9 +206,12 @@ class Ticket(models.Model):
             text_content = render_to_string('tickets/notification.txt', context)
             html_content = render_to_string('tickets/notification.html', context)
             clean_title = re.sub(r"[\r\n]+", "; ", self.title)
-            subject = '[Traq #%d] (%s) %s' % (self.pk, status, clean_title)
+            if is_new:
+                subject = '[Traq #%d] %s' % (self.pk, clean_title)
+            else:
+                subject = 'Re: [Traq #%d] %s' % (self.pk, clean_title)
 
-            msg = EmailMultiAlternatives(subject, text_content, 'traq@pdx.edu', [to])
+            msg = EmailMultiAlternatives(subject, text_content, 'traq@pdx.edu', to)
             msg.attach_alternative(html_content, "text/html")
             msg.send()
 
@@ -366,61 +369,37 @@ class Comment(models.Model):
     objects = CommentManager()
 
     def sendNotification(self):
+        """ Sends email notification on new comments on todos or tickets """
         if self.body:
+            parent = self.ticket or self.todo or None
+            project = parent.project
             if self.ticket:
                 # Send a ticket comment notification
-                recipients = list(participating(self.ticket) + set(self.cc) - set([self.created_by]))
                 item = 'Ticket'
-                ticket = self.ticket or None
-                ticket_url = SETTINGS.BASE_URL + reverse('tickets-detail', args=(ticket.pk,))
+                parent_url = SETTINGS.BASE_URL + reverse('tickets-detail', args=(parent.pk,))
+                recipients = list(participating(self.ticket) + set(self.cc) - set([self.created_by]))
             elif self.todo:
                 # Send a todo notification
                 item = 'To Do'
-                ticket = self.todo or None
-                ticket_url = SETTINGS.BASE_URL + reverse('todos-detail', args=(ticket.pk,))
+                parent_url = SETTINGS.BASE_URL + reverse('todos-detail', args=(parent.pk,))
+                recipients = list(set(self.cc) + set(project.clients.all()) + set(project.pm)  - set([self.created_by]))
             else:
-                # Thow an error
-    def sendNotification(self, cc=None):
-        """Send a notification email to the pm when a comment is made on  this ticket"""
-        to = []
-        if self.body is not None:
-            if self.cc is not None:
-                for cc in self.cc:
-                    to.append(cc.username + '@' + SETTINGS.EMAIL_DOMAIN)
-            if self.ticket is not None:
-                item = 'Ticket'
-                ticket = self.ticket or None
-                ticket_url = SETTINGS.BASE_URL + reverse('tickets-detail', args=(ticket.pk,))
-                if self.ticket.assigned_to:
-                    if not self.created_by == self.ticket.assigned_to:
-                        to.append(self.ticket.assigned_to.username +"@" + SETTINGS.EMAIL_DOMAIN)
-            else:
-                item = 'To Do'
-                ticket = self.todo or None  
-                ticket_url = SETTINGS.BASE_URL + reverse('todos-detail', args=(ticket.pk,))
-            project = ticket.project
-            if project.clients:
-                if self.todo:
-                    for client in project.clients.all():
-                        to.append(client.username + "@" + SETTINGS.EMAIL_DOMAIN)
-
-           # if there is no PM, there is no place to send the email
-            if project.pm is None:
+                # Do some default behavior? Error out?
                 return
-            to.append(project.pm.username + "@" + SETTINGS.EMAIL_DOMAIN)
-            
-            body = render_to_string('tickets/comment_notification.txt', {
-                "ticket": ticket,
-                "ticket_url": ticket_url, 
-                "author" : self.created_by,
-                "comment_body": self.body,
-            })
 
-            clean_title = re.sub(r"[\r\n]+", "; ", ticket.title)
-            subject = 'Traq New Comment: %s #%d %s' % (item, ticket.pk, clean_title)
-            if project.pm_email:
-                text_content = body
-                html_content = body
+            if len(recipients) > 0:
+                to = [recipient.email for recipient in recipients]
+                context = {
+                    "ticket": parent,
+                    "ticket_url": parent_url,
+                    "author" : self.created_by,
+                    "comment_body": self.body,
+                }
+                text_content = render_to_string('tickets/comment_notification.txt', context)
+                html_content = render_to_string('tickets/comment_notification.html', context)
+                clean_title = re.sub(r"[\r\n]+", "; ", parent.title)
+                subject = 'Re: [Traq #%d] %s' % (self.pk, clean_title)
+
                 msg = EmailMultiAlternatives(subject, text_content, 'traq@pdx.edu', to)
                 msg.attach_alternative(html_content, "text/html")
                 msg.send()
