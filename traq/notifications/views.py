@@ -47,23 +47,12 @@ def create_ldap_set(address):
     """Returns a set of alternate email addresses from an input email address"""
     qs = "(| (mail={0}) (mailRoutingAddress={0}) (mailLocalAddress={0}))".format(address)
     results = ldap.ldapsearch(qs)
-    
+
     mail = results[0][1]['mail']
     mail_routing_address = results[0][1]['mailRoutingAddress']
     mail_local_address = results[0][1]['mailLocalAddress']
 
     return set(mail + mail_routing_address + mail_local_address) - set([address])
-
-def create_notify_set(ticket):
-    """
-    Returns the set of user objects to be notified
-    """
-    participants = [comment.created_by for comment in ticket.comment_set.all()]
-    created = [ticket.created_by] if ticket.created_by else []
-    assigned = [ticket.assigned_to] if ticket.assigned_to else []
-    spammed = ticket.project.spammed.all()
-
-    return set(participants + created + assigned + spammed)
 
 def create_new_user(address):
     """Create and return a new User object based on their email address"""
