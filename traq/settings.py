@@ -14,7 +14,7 @@ LDAP = {
         "host": "ldap://ldap-bulk.oit.pdx.edu",
         "username": "uid=traq,ou=service,dc=pdx,dc=edu",
         "password": "",
-        "search_dn": "ou=people,dc=pdx,dc=edu",
+        "search_dn": "ou=Group,dc=pdx,dc=edu",
         "tls": True,
         "ca_file": os.path.join(PROJECT_DIR, "ca.crt"), # the full path to the certificate authority file
     }
