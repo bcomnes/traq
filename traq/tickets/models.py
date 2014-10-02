@@ -1,3 +1,4 @@
+import re
 from itertools import chain
 from datetime import timedelta, datetime
 from django.conf import settings as SETTINGS
@@ -11,7 +12,6 @@ from ..projects.models import Project, Component, Milestone
 from django.core.mail import EmailMultiAlternatives
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-import re
 
 def participating(ticket):
     """
@@ -22,7 +22,7 @@ def participating(ticket):
     assigned = [ticket.assigned_to] if ticket.assigned_to else []
     spammed = [user for user in ticket.project.spammed.all()]
 
-    return set(participants + created + assigned + spammed)
+    return list(set(participants + created + assigned + spammed))
 
 class TicketStatus(models.Model):
     ticket_status_id = models.AutoField(primary_key=True)
@@ -192,11 +192,11 @@ class Ticket(models.Model):
             'non_billable': non_billable,
         }
     def sendNotification(self, *args):
-        recipients = list(participating(self))
-        is_new = args[0] is 'New'
         """Send a notification email to the everyone involved in the ticket"""
-        if len(recipients) > 0:
-            to = [recipient.email for recipient in recipients]
+        recipients = participating(self)
+        to = [recipient.email for recipient in recipients if recipient.email]
+        is_new = args[0] is 'New'
+        if len(to) > 0:
             ticket_url = SETTINGS.BASE_URL + reverse('tickets-detail', args=(self.pk,))
             context = {
                 "ticket": self,
@@ -211,7 +211,12 @@ class Ticket(models.Model):
             else:
                 subject = 'Re: [Traq #%d] %s' % (self.pk, clean_title)
 
-            msg = EmailMultiAlternatives(subject, text_content, 'traq@pdx.edu', to)
+            try: 
+                reply_to = self.project.slug + '@' + SETTINGS.EMAIL_DOMAIN
+            except AttributeError:
+                reply_to = 'traq@' + SETTINGS.EMAIL_DOMAIN
+
+            msg = EmailMultiAlternatives(subject, text_content, reply_to, to)
             msg.attach_alternative(html_content, "text/html")
             msg.send()
 
@@ -373,22 +378,26 @@ class Comment(models.Model):
         if self.body:
             parent = self.ticket or self.todo or None
             project = parent.project
+            try:
+                cc = [user for user in self.cc]
+            except AttributeError:
+                cc = []
             if self.ticket:
                 # Send a ticket comment notification
                 item = 'Ticket'
                 parent_url = SETTINGS.BASE_URL + reverse('tickets-detail', args=(parent.pk,))
-                recipients = list(participating(self.ticket) + set(self.cc) - set([self.created_by]))
+                recipients = list(set(participating(self.ticket) + cc) - set([self.created_by]))
             elif self.todo:
                 # Send a todo notification
                 item = 'To Do'
                 parent_url = SETTINGS.BASE_URL + reverse('todos-detail', args=(parent.pk,))
-                recipients = list(set(self.cc) + set(project.clients.all()) + set(project.pm)  - set([self.created_by]))
+                recipients = list(set(cc + project.clients.all() + project.pm)  - set([self.created_by]))
             else:
                 # Do some default behavior? Error out?
                 return
 
-            if len(recipients) > 0:
-                to = [recipient.email for recipient in recipients]
+            to = [recipient.email for recipient in recipients if recipient.email]
+            if len(to) > 0:
                 context = {
                     "ticket": parent,
                     "ticket_url": parent_url,
@@ -396,11 +405,16 @@ class Comment(models.Model):
                     "comment_body": self.body,
                 }
                 text_content = render_to_string('tickets/comment_notification.txt', context)
-                html_content = render_to_string('tickets/comment_notification.html', context)
+                html_content = render_to_string('tickets/comment_notification.txt', context)
                 clean_title = re.sub(r"[\r\n]+", "; ", parent.title)
                 subject = 'Re: [Traq #%d] %s' % (self.pk, clean_title)
 
-                msg = EmailMultiAlternatives(subject, text_content, 'traq@pdx.edu', to)
+                try: 
+                    reply_to = self.ticket.project.slug + '@' + SETTINGS.EMAIL_DOMAIN
+                except AttributeError:
+                    reply_to = 'traq@' + SETTINGS.EMAIL_DOMAIN
+
+                msg = EmailMultiAlternatives(subject, text_content, reply_to, to)
                 msg.attach_alternative(html_content, "text/html")
                 msg.send()
 

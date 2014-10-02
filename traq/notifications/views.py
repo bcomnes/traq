@@ -57,7 +57,7 @@ def create_ldap_set(address):
 def create_new_user(address):
     """Create and return a new User object based on their email address"""
 
-    name = parse_email(address)['user_part'] if parse_email(address)['sender_domain'] == 'pdx.edu' else address
+    name = parse_email(address)['user_part'] if parse_email(address)['domain_part'] == 'pdx.edu' else address
     new_user = User.objects.create_user(name, email=address)
     new_user.save()
     return new_user
@@ -71,7 +71,7 @@ def create_new_ticket_object(project, subject, body, created_by):
 
 def create_new_comment_object(ticket, body, created_by):
     """Creates and returns a new Comment Object"""
-    return Comment(Ticket=ticket, body=body, created_by=created_by)
+    return Comment(ticket=ticket, body=body, created_by=created_by)
 
 @csrf_exempt
 def index(request):
