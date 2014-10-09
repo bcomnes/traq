@@ -38,20 +38,3 @@ class PSUBackend(CASBackend):
             pass
 
         return groups
-
-        #if SETTINGS.DEBUG and SETTINGS.LDAP_DISABLED:
-        #    return LOGIN_GROUPS
-
-        ## figure out which ldap groups this user belongs to
-        #ld = ldap.initialize(SETTINGS.LDAP_URL)
-        #ld.simple_bind_s()
-        #results = ld.search_s(SETTINGS.LDAP_BASE_DN, ldap.SCOPE_SUBTREE, "(& (memberUid=" + username + ") (cn=*))")
-        #groups = [result[1]['cn'][0] for result in results]
-        #try:
-        #    user = User.objects.get(username=username)
-        #    groups.extend([group.name for group in user.groups.all()])
-        #except User.DoesNotExist:
-        #    pass
-
-        #return groups
-
