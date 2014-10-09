@@ -17,6 +17,7 @@ def participating(ticket):
     """
     Returns the full set of user objects that have participated in a ticket
     """
+    # TODO: Turn this into a method for tickets and comments
     participants = [comment.created_by for comment in ticket.comment_set.all()]
     created = [ticket.created_by] if ticket.created_by else []
     assigned = [ticket.assigned_to] if ticket.assigned_to else []
@@ -195,6 +196,7 @@ class Ticket(models.Model):
         """Send a notification email to the everyone involved in the ticket"""
         recipients = participating(self)
         to = [recipient.email for recipient in recipients if recipient.email]
+        # TODO: Refactor isnew passint
         is_new = args[0] is 'New'
         if len(to) > 0:
             ticket_url = SETTINGS.BASE_URL + reverse('tickets-detail', args=(self.pk,))

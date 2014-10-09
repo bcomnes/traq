@@ -29,6 +29,7 @@ def parse_email(address):
 
 def get_ticket(mail_subject):
     """Returns the ticket object referenced in the subject tag"""
+    # TODO: Make regex more specfic
     tags = re.findall(r"\[(.*?)\]", mail_subject)
     if len(tags) > 0:
         # Sample ticket tag: [TRAQ #123]
@@ -40,9 +41,11 @@ def get_ticket(mail_subject):
 
 def create_ldap_set(address):
     """Returns a set of alternate email addresses from an input email address"""
+    # TODO: escape LDAP lookup qs.
     qs = "(| (mail={0}) (mailRoutingAddress={0}) (mailLocalAddress={0}))".format(address)
     results = ldap.ldapsearch(qs)
 
+    # TODO: Handle field presense errors
     mail = results[0][1]['mail']
     mail_routing_address = results[0][1]['mailRoutingAddress']
     mail_local_address = results[0][1]['mailLocalAddress']
@@ -66,11 +69,12 @@ def create_new_ticket_object(project, subject, body, created_by):
 
 def create_new_comment_object(ticket, body, created_by):
     """Creates and returns a new Comment Object"""
+    # TODO: Look into removing this
     return Comment(ticket=ticket, body=body, created_by=created_by)
 
 @csrf_exempt
 def index(request):
-    #import pdb; pdb.set_trace()
+    # TODO: Send error emails on failed emails
     if request.method == 'GET':
         return HttpResponse("Hi!  You don't look like email")
 
@@ -116,7 +120,8 @@ def index(request):
                     created_by = alt_users[0]
                 else:
                     created_by = create_new_user(sender)
-
+        #TODO: Add guarding returns
+        #TODO: Make return paths specific
         try:
             ticket = get_ticket(subject)
         except Ticket.DoesNotExist:
