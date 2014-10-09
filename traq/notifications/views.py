@@ -10,11 +10,6 @@ from traq.tickets.models import Ticket, TicketStatus, TicketPriority, Comment
 
 from traq.local_settings import MAILGUN_API_KEY
 
-class DoesNotVerify(Exception):
-    """Exception when the request isn't a valid mailgun POST"""
-    def __str__(self):
-        return "Request failed to validate"
-
 def verify(api_key, token, timestamp, signature):
     """Verifies the request against the mailgun MAILGUN_API_KEY"""
     # See http://documentation.mailgun.com/user_manual.html#webhooks
@@ -22,9 +17,9 @@ def verify(api_key, token, timestamp, signature):
                         msg=timestamp + token,
                         digestmod=hashlib.sha256).hexdigest()
     if signature == req_hash:
-        return
+        return True # Its good
     else:
-        raise DoesNotVerify()
+        return False # Nope, Do not trust
 
 def parse_email(address):
     """Returns a dictionary of [user_part]@[donain_part] from the address"""
@@ -103,9 +98,7 @@ def index(request):
             response.status_code = 406
             return response
 
-        try:
-            verify(MAILGUN_API_KEY, token, timestamp, signature)
-        except DoesNotVerify:
+        if not verify(MAILGUN_API_KEY, token, timestamp, signature):
             response.content = "Invalid mailgun token"
             response.status_code = 406
             return response
